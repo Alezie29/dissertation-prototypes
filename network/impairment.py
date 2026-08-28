@@ -11,7 +11,7 @@ class ImpairmentInjector:
 
     def apply(self, send_fn, data: bytes, dest_port: int):
     # Check should_drop(), if True, do nothing because the packet is simulated as lost.
-   
+
     # If not dropped, and latency_ms is greater than 0, delay before actually sending, this simulates network latency.
         if self.should_drop():
             return
@@ -23,4 +23,19 @@ class ImpairmentInjector:
             
         send_fn(data, dest_port)
         # Send the packet by calling the send function with data and dest_port
-          
+
+    
+if __name__ == "__main__":
+
+    def fake_send(data, dest_port):
+        print(f"Sent: {data} to port {dest_port}")
+
+    print("Testing guaranteed drop (100%)")
+    injector_drop = ImpairmentInjector(latency_ms=0, packet_loss_pct=100)
+    injector_drop.apply(fake_send, b"test", 9999)
+    print("(nothing above this line means dropped correctly)\n")
+
+    print("Testing guaranteed send (0% loss)")
+    injector_send = ImpairmentInjector(latency_ms=0, packet_loss_pct=0)
+    injector_send.apply(fake_send, b"test", 9999)
+        
