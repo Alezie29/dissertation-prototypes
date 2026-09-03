@@ -15,10 +15,13 @@ def main():
     while True:
         # Use transport.receive() to check for client input
         received_data = transport.receive()
+        # print("Server received:", received_data)  # TEMP DEBUG
         if received_data is not None:
         # If not None, apply it to game_state.entities["player"]
         # (e.g. updating vx/vy based on what the client sent)
             game_state.entities["player"].update(received_data) # Updating the players key in dict with the updated data
+
+            print(game_state.entities["player"])
 
         # Call game_state.step(dt) — pass in how much time has elapsed, matching tick rate
         game_state.step(1 / TICK_RATE) # If tick rate is 30, this would be 0.033 (0.033 seconds per loop)
