@@ -8,8 +8,7 @@ class ClientSidePrediction(SynchronisationStrategy):
 
     def process_input(self, input_data):
         seq = self.sequence_number
-        # Given some input data, tag it with the current sequence_number
-        # Store it in pending_inputs with sequence_number as key
+        # Given some input data, tag it with the current sequence_number and store it in pending_inputs with sequence_number as key
         self.pending_inputs[seq] = input_data
         # Increment sequence_number for next time
         self.sequence_number += 1
