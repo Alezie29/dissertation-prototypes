@@ -1,4 +1,5 @@
 from strategies.base import SynchronisationStrategy
+from engine.game_state import GameState
 
 
 class ClientSidePrediction(SynchronisationStrategy):
@@ -16,7 +17,7 @@ class ClientSidePrediction(SynchronisationStrategy):
         tagged_input = {"seq": seq, **input_data}
         return tagged_input
     
-    def reconcile(self, authoritative_state):
+    def reconcile(self, game_state, authoritative_state):
         confirmed_seq = authoritative_state["seq"]
         
         # Find every key in self.pending_inputs that is <= confirmed_seq
@@ -33,6 +34,7 @@ class ClientSidePrediction(SynchronisationStrategy):
 
 if __name__ == "__main__":
     cp = ClientSidePrediction()
+    gs = GameState()
     print(cp.process_input({"vx": 5, "vy": 0}))
     print(cp.process_input({"vx": 0, "vy": -3}))
     print(cp.pending_inputs)
@@ -40,5 +42,5 @@ if __name__ == "__main__":
     cp.process_input({"vx": 2, "vy": 2})
 
     print("Before reconcile:", cp.pending_inputs)
-    cp.reconcile({"seq": 1, "x": 10.0, "y": 0.0})
+    cp.reconcile(gs, {"seq": 1, "x": 10.0, "y": 0.0})
     print("After reconcile:", cp.pending_inputs)

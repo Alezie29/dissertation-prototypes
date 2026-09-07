@@ -7,9 +7,9 @@ class SynchronisationStrategy(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def reconcile(self, authoritative_state):
+    def reconcile(self, game_state, authoritative_state):
         raise NotImplementedError
 
     @abstractmethod
-    def predict(self, dt: float):
+    def predict(self, game_state, dt: float):
         raise NotImplementedError 
