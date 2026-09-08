@@ -11,5 +11,5 @@ class SynchronisationStrategy(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def predict(self, game_state, dt: float):
+    def predict(self, game_state, input_data, dt):
         raise NotImplementedError 

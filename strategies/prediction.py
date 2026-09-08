@@ -39,8 +39,10 @@ class ClientSidePrediction(SynchronisationStrategy):
             game_state.entities["player"]["vy"] = n["vy"]            
             game_state.step(1/30) # Move forward a step
 
-    def predict(self, dt: float):
-        raise NotImplementedError
+    def predict(self, game_state, input_data, dt):
+        game_state.entities["player"]["vx"] = input_data["vx"] # Update position
+        game_state.entities["player"]["vy"] = input_data["vy"]
+        game_state.step(dt) # Move forward a step
 
 if __name__ == "__main__":
     cp = ClientSidePrediction()
@@ -53,5 +55,8 @@ if __name__ == "__main__":
 
     print("Player state before:", gs.entities["player"])
     cp.reconcile(gs, {"seq": 1, "x": 10.0, "y": 5.0})
-    print("Player state after:", gs.entities["player"])
+    print("Player state after reconcile:", gs.entities["player"])
     print("Remaining buffer:", cp.pending_inputs)
+
+    cp.predict(gs, {"vx": 3, "vy": -1}, 1/30)
+    print("Player state after predict:", gs.entities["player"])
