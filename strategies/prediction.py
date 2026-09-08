@@ -29,18 +29,27 @@ class ClientSidePrediction(SynchronisationStrategy):
         for d in keys_delete:
             self.pending_inputs.pop(d) # Go through the dict and remove each key without throwing error by removing it directly from the dict, hence a list was made first
 
+        # TODO: snap game_state.entities["player"]'s x and y to match
+        # authoritative_state's x and y — only those two keys, nothing else
+        game_state.entities["player"]["x"] = authoritative_state["x"]
+        game_state.entities["player"]["y"] = authoritative_state["y"]
+
     def predict(self, dt: float):
         raise NotImplementedError
 
 if __name__ == "__main__":
     cp = ClientSidePrediction()
     gs = GameState()
+
     print(cp.process_input({"vx": 5, "vy": 0}))
     print(cp.process_input({"vx": 0, "vy": -3}))
-    print(cp.pending_inputs)
     cp.process_input({"vx": 1, "vy": 1})
     cp.process_input({"vx": 2, "vy": 2})
 
     print("Before reconcile:", cp.pending_inputs)
-    cp.reconcile(gs, {"seq": 1, "x": 10.0, "y": 0.0})
+    print("Player state before:", gs.entities["player"])
+
+    cp.reconcile(gs, {"seq": 1, "x": 10.0, "y": 5.0})
+
     print("After reconcile:", cp.pending_inputs)
+    print("Player state after:", gs.entities["player"])
