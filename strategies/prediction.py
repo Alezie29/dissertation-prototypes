@@ -34,6 +34,11 @@ class ClientSidePrediction(SynchronisationStrategy):
         game_state.entities["player"]["x"] = authoritative_state["x"]
         game_state.entities["player"]["y"] = authoritative_state["y"]
 
+        for n in self.pending_inputs.values(): # Loop through remaining pending inputs
+            game_state.entities["player"]["vx"] = n["vx"] # Update velocities
+            game_state.entities["player"]["vy"] = n["vy"]            
+            game_state.step(1/30) # Move forward a step
+
     def predict(self, dt: float):
         raise NotImplementedError
 
@@ -41,15 +46,12 @@ if __name__ == "__main__":
     cp = ClientSidePrediction()
     gs = GameState()
 
-    print(cp.process_input({"vx": 5, "vy": 0}))
-    print(cp.process_input({"vx": 0, "vy": -3}))
+    cp.process_input({"vx": 5, "vy": 0})
+    cp.process_input({"vx": 0, "vy": -3})
     cp.process_input({"vx": 1, "vy": 1})
     cp.process_input({"vx": 2, "vy": 2})
 
-    print("Before reconcile:", cp.pending_inputs)
     print("Player state before:", gs.entities["player"])
-
     cp.reconcile(gs, {"seq": 1, "x": 10.0, "y": 5.0})
-
-    print("After reconcile:", cp.pending_inputs)
     print("Player state after:", gs.entities["player"])
+    print("Remaining buffer:", cp.pending_inputs)
