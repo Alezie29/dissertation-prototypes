@@ -7,7 +7,7 @@ class ClientSidePrediction(SynchronisationStrategy):
         self.sequence_number = 0
         self.pending_inputs = {}
 
-    def process_input(self, input_data):
+    def process_input(self, game_state, input_data):
         seq = self.sequence_number
         # Given some input data, tag it with the current sequence_number and store it in pending_inputs with sequence_number as key
         self.pending_inputs[seq] = input_data
@@ -29,7 +29,6 @@ class ClientSidePrediction(SynchronisationStrategy):
         for d in keys_delete:
             self.pending_inputs.pop(d) # Go through the dict and remove each key without throwing error by removing it directly from the dict, hence a list was made first
 
-        # TODO: snap game_state.entities["player"]'s x and y to match
         # authoritative_state's x and y — only those two keys, nothing else
         game_state.entities["player"]["x"] = authoritative_state["x"]
         game_state.entities["player"]["y"] = authoritative_state["y"]
