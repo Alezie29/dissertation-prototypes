@@ -3,7 +3,7 @@ from abc import ABC, abstractmethod
 
 class SynchronisationStrategy(ABC):
     @abstractmethod
-    def process_input(self, input_data):
+    def process_input(self, game_state, input_data):
         raise NotImplementedError
 
     @abstractmethod
