@@ -26,13 +26,14 @@ def main():
 
         # Predict() however, will run every tick regardless of input changes, since local simulation needs to keep advancing continuosly for insant responsiveness, seperate from whether a new input event has occurred,. 
         strategy.predict(game_state, current_input, 1 / TICK_RATE)
+        # print("Client player state:", game_state.entities["player"]) # TEMP DEBUG
 
         # Check for authoritative update from server. Not every tick will have one so this is None most of the time.
         received_data = transport.receive()
         if received_data is not None:
             # Reconcile() trims confirmed inputs from the buffer and replays whatever is left, correcting local prediction if wrong.
             strategy.reconcile(game_state, received_data)
-            
+
         time.sleep(1 / TICK_RATE)
 
 if __name__ == "__main__":

@@ -15,17 +15,19 @@ def main():
     while True:
         # Use transport.receive() to check for client input
         received_data = transport.receive()
-        # print("Server received:", received_data)  # TEMP DEBUG
         if received_data is not None:
-        # If not None, apply it to game_state.entities["player"]
-        # (e.g. updating vx/vy based on what the client sent)
-            game_state.entities["player"].update(received_data) # Updating the players key in dict with the updated data
+            seq = received_data["seq"]
 
-            print(game_state.entities["player"])
+            # Apply only vx/vy (not seq) to game_state.entities["player"]
+            game_state.entities["player"]["vx"] = received_data["vx"]
+            game_state.entities["player"]["vy"] = received_data["vy"]
 
-        # Call game_state.step(dt) — pass in how much time has elapsed, matching tick rate
+            response = {"seq": seq, **game_state.entities["player"]}
+            injector.apply(transport.send, response, CLIENT_PORT)
+            # print("Server sent response:", response) # TEMP DEBUG
+
+        # Call game_state.step(dt), passing in how much time has elapsed, matching tick rate
         game_state.step(1 / TICK_RATE) # If tick rate is 30, this would be 0.033 (0.033 seconds per loop)
-        injector.apply(transport.send, game_state.entities, CLIENT_PORT)
         time.sleep(1 / TICK_RATE) # If this is not added, it would fire until cpu usage burns out
 
 if __name__ == "__main__": # Only run the server if this file is executed directly
