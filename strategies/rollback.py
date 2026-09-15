@@ -6,7 +6,7 @@ class RollbackNetcode(SynchronisationStrategy):
         self.tick_to_state = {}
         self.tick_counter = 0
         self.last_known_input = {"vx": 0, "vy": 0}
-        
+
 
     def process_input(self, game_state, input_data):
         # TODO: Rollback needs to record inputs per-frame, likely similar to prediction's sequence-numbered buffer, but used differently (for rewinding, not for replay-on-reconcile)
@@ -17,8 +17,17 @@ class RollbackNetcode(SynchronisationStrategy):
         raise NotImplementedError
 
     def predict(self, game_state, dt: float):
-        # TODO: 1. figure out the guessed input (last known input, or a default if none yet)
-        # TODO: 2. snapshot the CURRENT state (before stepping) into tick_to_state, tagged with tick_counter
-        # TODO: 3. apply the guessed input to the npc entity
-        # TODO: 4. step the simulation forward
-        # TODO: 5. increment tick_counter
+        guessed_input = self.last_known_input 
+        self.tick_to_state[self.tick_counter] = { # Must snapshot before stepping so rollback has a valid state to come back to
+            "state": game_state.clone(),
+            "guessed_input": guessed_input,
+        }
+        # Apply the guessed input to the player entity
+        game_state.entities["player"]["vx"] = guessed_input["vx"]
+        game_state.entities["player"]["vy"] = guessed_input["vy"]
+
+        # Step the simulation forward
+        game_state.step(dt)
+
+        # Increment tick_counter
+        self.tick_counter += 1
