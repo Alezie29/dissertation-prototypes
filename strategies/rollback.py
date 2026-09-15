@@ -7,10 +7,8 @@ class RollbackNetcode(SynchronisationStrategy):
         self.tick_counter = 0
         self.last_known_input = {"vx": 0, "vy": 0}
 
-
     def process_input(self, game_state, input_data):
-        # TODO: Rollback needs to record inputs per-frame, likely similar to prediction's sequence-numbered buffer, but used differently (for rewinding, not for replay-on-reconcile)
-        raise NotImplementedError
+        self.last_known_input = input_data # Simply use the last known input from the player as the last known input state for rollback to come back to
 
     def reconcile(self, game_state, authoritative_state):
         # TODO: Compare the guessed input for a given frame against what really happened, if wrong, rewind + resimulate
@@ -30,4 +28,4 @@ class RollbackNetcode(SynchronisationStrategy):
         game_state.step(dt)
 
         # Increment tick_counter
-        self.tick_counter += 1
+        self.tick_counter += 1   
