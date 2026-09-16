@@ -1,5 +1,6 @@
 from strategies.base import SynchronisationStrategy
-
+from engine.game_state import GameState
+import copy
 
 class RollbackNetcode(SynchronisationStrategy):
     def __init__(self):
@@ -20,10 +21,20 @@ class RollbackNetcode(SynchronisationStrategy):
         if guessed_input["vx"] == authoritative_state["vx"] and guessed_input["vy"] == authoritative_state["vy"]:
             return
 
-        # TODO: Restore game state from previous snap shot
-        # TODO: Apply real input to player entity and step 
-        # TODO: Loop through every tick after corrected tick, for each one, reapply its stored guessed_input and step forward once, to catch back up to "now"
-    
+        # Restore game state from previous snap shot
+        game_state.entities = copy.deepcopy(self.tick_to_state[corrected_tick]["state"])
+
+        # Apply real input to player entity and step 
+        game_state.entities["player"]["vx"] = authoritative_state["vx"]
+        game_state.entities["player"]["vy"] = authoritative_state["vy"]
+        game_state.step(1/30)
+
+        # Loop through every tick after corrected tick, for each one, reapply its stored guessed_input and step forward once, to catch back up to "now"
+        for tick in range(corrected_tick +1, self.tick_counter):
+            game_state.entities["player"]["vx"] = self.tick_to_state[tick]["guessed_input"]["vx"]
+            game_state.entities["player"]["vy"] = self.tick_to_state[tick]["guessed_input"]["vy"]
+            game_state.step(1/30) 
+
     def predict(self, game_state, dt: float):
         guessed_input = self.last_known_input 
         self.tick_to_state[self.tick_counter] = { # Must snapshot before stepping so rollback has a valid state to come back to
@@ -38,4 +49,22 @@ class RollbackNetcode(SynchronisationStrategy):
         game_state.step(dt)
 
         # Increment tick_counter
-        self.tick_counter += 1   
+        self.tick_counter += 1  
+
+if __name__ == "__main__":
+    rb = RollbackNetcode()
+    gs = GameState()
+
+    # Simulate a few predicted ticks with a "wrong" guess
+    rb.process_input(gs, {"vx": 5, "vy": 0})  # sets last_known_input
+    rb.predict(gs, 1/30)  # tick 0
+    rb.predict(gs, 1/30)  # tick 1
+    rb.predict(gs, 1/30)  # tick 2
+
+    print("Before reconcile:", gs.entities["player"])
+    print("Stored ticks:", list(rb.tick_to_state.keys()))
+
+    # Server says tick 0's REAL input was actually different
+    rb.reconcile(gs, {"tick": 0, "vx": 2, "vy": 0})
+
+    print("After reconcile:", gs.entities["player"]) 

@@ -1,12 +1,9 @@
 # Shared Game Engine Core
-
 import copy 
 
 class GameState:
     def __init__(self):
-        # Created a dictionary keyed by "player" and "npc",
-        # Each value holds that entity's x, y, vx, vy (position and velocity),
-        # Using a nested dict here for easy lookup
+        # Created a dictionary keyed by "player" and "npc", each value holds that entity's x, y, vx, vy (position and velocity), using a nested dict here for easy lookup
         self.entities = {
         "player": {"x": 0, "y": 0, "vx": 0, "vy": 0},
         "npc": {"x": 0, "y": 0, "vx": 0, "vy": 0},
@@ -20,9 +17,7 @@ class GameState:
             vx = data["vx"]
             vy = data["vy"]
             
-        # For each one, update its x and y using its velocity and dt
-        # (Bernier's extrapolation formula from lit review:
-        # P(t) = P0 + V0 * dt)
+        # For each one, update its x and y using its velocity and dt (Bernier's extrapolation formula from lit review: P(t) = P0 + V0 * dt)
             nx = x + ( vx * dt ) # New X = old X + (x-velocity * time elapsed)
             ny = y + ( vy * dt ) # New Y = old Y + (y-velocity * time elapsed)
 
@@ -31,11 +26,7 @@ class GameState:
             data["y"] = ny
 
     def clone(self):
-        # Return a deep copy of self.entities
-        # Deep copy needed — rollback relies on this clone being fully
-        # independent. If it shared references with the original,
-        # resimulating the rolled-back state would corrupt the current
-        # state too.
+        # Return a deep copy of self.entities. Deep copy needed — rollback relies on this clone being fully independent. If it shared references with the original, resimulating the rolled-back state would corrupt the current state too.
         return copy.deepcopy(self.entities)
 
 
