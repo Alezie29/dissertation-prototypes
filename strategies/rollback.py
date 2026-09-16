@@ -11,9 +11,19 @@ class RollbackNetcode(SynchronisationStrategy):
         self.last_known_input = input_data # Simply use the last known input from the player as the last known input state for rollback to come back to
 
     def reconcile(self, game_state, authoritative_state):
-        # TODO: Compare the guessed input for a given frame against what really happened, if wrong, rewind + resimulate
-        raise NotImplementedError
+        corrected_tick = authoritative_state["tick"]
 
+        # Get the guess that was stored for this tick
+        guessed_input = self.tick_to_state[corrected_tick]["guessed_input"] 
+
+        # Compare to real input. If equal, return early (no correction needed)
+        if guessed_input["vx"] == authoritative_state["vx"] and guessed_input["vy"] == authoritative_state["vy"]:
+            return
+
+        # TODO: Restore game state from previous snap shot
+        # TODO: Apply real input to player entity and step 
+        # TODO: Loop through every tick after corrected tick, for each one, reapply its stored guessed_input and step forward once, to catch back up to "now"
+    
     def predict(self, game_state, dt: float):
         guessed_input = self.last_known_input 
         self.tick_to_state[self.tick_counter] = { # Must snapshot before stepping so rollback has a valid state to come back to
