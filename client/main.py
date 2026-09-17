@@ -21,17 +21,16 @@ def main():
     tagged_input = strategy.process_input(game_state, current_input)
 
     while True:
-        # The same tagged_input is sent every tick intentionally. Since the toolkit tests behaviour under simulated packet loss, resending the current input redundantly protects against individual packets being dropped, instead of relying on a single send succeeding.
-        injector.apply(transport.send, tagged_input, SERVER_PORT) 
+        # Rollback resends the raw current_input each tick, tagged with the tick it's associated with, so the server can confirm/deny it later
+        tagged_input = {"tick": strategy.tick_counter, **current_input}
+        injector.apply(transport.send, tagged_input, SERVER_PORT)
 
-        # Predict() however, will run every tick regardless of input changes, since local simulation needs to keep advancing continuosly for insant responsiveness, seperate from whether a new input event has occurred,. 
-        strategy.predict(game_state, current_input, 1 / TICK_RATE)
-        # print("Client player state:", game_state.entities["player"]) # TEMP DEBUG
+        # predict() runs every tick — guesses, snapshots, steps, increments tick
+        strategy.predict(game_state, 1 / TICK_RATE)
 
-        # Check for authoritative update from server. Not every tick will have one so this is None most of the time.
+        # If the server sends back a correction, reconcile() rewinds/resimulates
         received_data = transport.receive()
         if received_data is not None:
-            # Reconcile() trims confirmed inputs from the buffer and replays whatever is left, correcting local prediction if wrong.
             strategy.reconcile(game_state, received_data)
 
         time.sleep(1 / TICK_RATE)
