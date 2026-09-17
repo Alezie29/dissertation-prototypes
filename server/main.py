@@ -16,15 +16,13 @@ def main():
         # Use transport.receive() to check for client input
         received_data = transport.receive()
         if received_data is not None:
-            seq = received_data["seq"]
+            tick = received_data["tick"]
 
-            # Apply only vx/vy (not seq) to game_state.entities["player"]
             game_state.entities["player"]["vx"] = received_data["vx"]
             game_state.entities["player"]["vy"] = received_data["vy"]
 
-            response = {"seq": seq, **game_state.entities["player"]}
+            response = {"tick": tick, "vx": game_state.entities["player"]["vx"], "vy": game_state.entities["player"]["vy"]} 
             injector.apply(transport.send, response, CLIENT_PORT)
-            # print("Server sent response:", response) # TEMP DEBUG
 
         # Call game_state.step(dt), passing in how much time has elapsed, matching tick rate
         game_state.step(1 / TICK_RATE) # If tick rate is 30, this would be 0.033 (0.033 seconds per loop)
