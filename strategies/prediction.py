@@ -6,6 +6,7 @@ class ClientSidePrediction(SynchronisationStrategy):
     def __init__(self):
         self.sequence_number = 0
         self.pending_inputs = {}
+        self.current_input = {"vx": 0, "vy": 0}
 
     def process_input(self, game_state, input_data):
         seq = self.sequence_number
@@ -15,6 +16,7 @@ class ClientSidePrediction(SynchronisationStrategy):
         self.sequence_number += 1
         # Return the tagged input
         tagged_input = {"seq": seq, **input_data}
+        self.current_input = input_data
         return tagged_input
     
     def reconcile(self, game_state, authoritative_state):
@@ -38,9 +40,9 @@ class ClientSidePrediction(SynchronisationStrategy):
             game_state.entities["player"]["vy"] = n["vy"]            
             game_state.step(1/30) # Move forward a step
 
-    def predict(self, game_state, input_data, dt):
-        game_state.entities["player"]["vx"] = input_data["vx"] # Update position
-        game_state.entities["player"]["vy"] = input_data["vy"]
+    def predict(self, game_state, dt: float):
+        game_state.entities["player"]["vx"] = self.current_input["vx"] # Update position
+        game_state.entities["player"]["vy"] = self.current_input["vy"]
         game_state.step(dt) # Move forward a step
 
 if __name__ == "__main__":

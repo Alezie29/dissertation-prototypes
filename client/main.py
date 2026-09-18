@@ -7,7 +7,7 @@ import time
 
 CLIENT_PORT = 9998
 SERVER_PORT = 9999
-TICK_RATE = 2
+TICK_RATE = 30
 
 def main():
     game_state = GameState()
@@ -16,7 +16,7 @@ def main():
     strategy = RollbackNetcode()
 
     # process_input() is called only once, not every tick, as it represents a discrete input event (when the player makes a keystroke), not a conitnuous process.
-    # TODO: once a real keyboard is wired in, this should only be called again when the player's input actually changes, not on a fixed schedule.
+    # Once real keyboard input is given, this should only be called again when the player's input actually changes, not on a fixed schedule.
 
     current_input = {"vx": 5, "vy": 0}
     tagged_input = strategy.process_input(game_state, current_input)
@@ -29,7 +29,7 @@ def main():
         # predict() runs every tick — guesses, snapshots, steps, increments tick
         strategy.predict(game_state, 1 / TICK_RATE)
 
-        print("Client player state:", game_state.entities["player"], "tick:", strategy.tick_counter) # Testing for final implementation of all 3 strategies
+        # print("Client player state:", game_state.entities["player"], "tick:", strategy.tick_counter) # Testing for rollback netcode
 
         # If the server sends back a correction, reconcile() rewinds/resimulates
         received_data = transport.receive()
