@@ -5,7 +5,7 @@ import time
 
 SERVER_PORT = 9999 # Hardcoded as examples, this will be updated later
 CLIENT_PORT = 9998
-TICK_RATE = 30 # Adjustable variable for better structure
+TICK_RATE = 2 # Adjustable variable for better structure
 
 def main():
     game_state = GameState()
@@ -23,6 +23,8 @@ def main():
 
             response = {"tick": tick, "vx": game_state.entities["player"]["vx"], "vy": game_state.entities["player"]["vy"]} 
             injector.apply(transport.send, response, CLIENT_PORT)
+
+            print("Server response:", response) # Testing for final implementation of all 3 strategies
 
         # Call game_state.step(dt), passing in how much time has elapsed, matching tick rate
         game_state.step(1 / TICK_RATE) # If tick rate is 30, this would be 0.033 (0.033 seconds per loop)
