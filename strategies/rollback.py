@@ -8,11 +8,15 @@ class RollbackNetcode(SynchronisationStrategy):
         self.tick_counter = 0
         self.last_known_input = {"vx": 0, "vy": 0}
 
-    def process_input(self, game_state, input_data):
-        self.last_known_input = input_data # Simply use the last known input from the player as the last known input state for rollback to come back to
+    def process_input(self,game_state,input_data):
+        # Storing input so future predict method can guess it's still happening
+        self.last_known_input = input_data
+        # Return a tagged version so the client loop can send it the same way regardless of which strategy is used
+        tagged_input = {"seq":self.tick_counter, **input_data}
+        return tagged_input
 
     def reconcile(self, game_state, authoritative_state):
-        corrected_tick = authoritative_state["tick"]
+        corrected_tick = authoritative_state["seq"]
 
         # Get the guess that was stored for this tick
         guessed_input = self.tick_to_state[corrected_tick]["guessed_input"] 

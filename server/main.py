@@ -1,3 +1,4 @@
+import sys
 from engine.game_state import GameState
 from network.transport import UDPTransport
 from network.impairment import ImpairmentInjector
@@ -8,23 +9,29 @@ CLIENT_PORT = 9998
 TICK_RATE = 30 # Adjustable variable for better structure
 
 def main():
+    if len(sys.argv) < 3:
+        print("Please use a valid format: python3 -m server.main <latency_ms> <packet_loss_pct>")
+        sys.exit(1)
+
+    latency_ms = int(sys.argv[1])
+    packet_loss_pct = float(sys.argv[2])
+
     game_state = GameState()
     transport = UDPTransport(local_port=SERVER_PORT)
-    injector = ImpairmentInjector(latency_ms=0, packet_loss_pct=0)
+    injector = ImpairmentInjector(latency_ms=latency_ms, packet_loss_pct=packet_loss_pct)
 
     while True:
         # Use transport.receive() to check for client input
         received_data = transport.receive()
         if received_data is not None:
-            tick = received_data["tick"]
-
+            seq = received_data["seq"]
             game_state.entities["player"]["vx"] = received_data["vx"]
             game_state.entities["player"]["vy"] = received_data["vy"]
 
-            response = {"tick": tick, "vx": game_state.entities["player"]["vx"], "vy": game_state.entities["player"]["vy"]} 
+            response = {"seq": seq, "vx": game_state.entities["player"]["vx"], "vy": game_state.entities["player"]["vy"]} 
             injector.apply(transport.send, response, CLIENT_PORT)
 
-            # print("Server response:", response) # Testing for rollback netcode
+            # print("Server response:", response) # Testing
 
         # Call game_state.step(dt), passing in how much time has elapsed, matching tick rate
         game_state.step(1 / TICK_RATE) # If tick rate is 30, this would be 0.033 (0.033 seconds per loop)
