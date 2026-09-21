@@ -1,3 +1,7 @@
+import subprocess
+import time
+
+
 LATENCY_TIERS_MS = [0, 50, 100, 200]
 PACKET_LOSS_TIERS_PCT = [0, 3, 6]
 FIXED_LATENCY_FOR_LOSS_BLOCK_MS = 100
@@ -25,9 +29,10 @@ class SessionController:
                 trials.append(trial)
         return trials
 
-""" if __name__ == "__main__":
-    sc = SessionController()
-    trials = sc.build_trial_matrix()
-    print("Total trials:", len(trials))
-    for t in trials:
-        print(t) """ # Testing the matrix, VERIFIED ! 
+if __name__ == "__main__":
+    print("Starting server...")
+    process = subprocess.Popen(["python3", "-m", "server.main"])
+    print("Server started, waiting 2 seconds...")
+    time.sleep(2)
+    process.terminate()
+    print("Server terminated.")
