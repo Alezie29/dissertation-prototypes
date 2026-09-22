@@ -29,10 +29,17 @@ class SessionController:
                 trials.append(trial)
         return trials
 
+    def run_trial(self, architecture: str, latency_ms: int, packet_loss_pct: float): # Using subprocess to open both the server and client.main files in conjunction, letting them run for some time, then terminating
+        server_process = subprocess.Popen([
+            "python3", "-m", "server.main", str(latency_ms), str(packet_loss_pct)
+        ])
+        client_process = subprocess.Popen([
+            "python3", "-m", "client.main", architecture, str(latency_ms), str(packet_loss_pct)
+        ])
+        time.sleep(15)
+        server_process.terminate()
+        client_process.terminate()
+
 if __name__ == "__main__":
-    print("Starting server...")
-    process = subprocess.Popen(["python3", "-m", "server.main"])
-    print("Server started, waiting 2 seconds...")
-    time.sleep(2)
-    process.terminate()
-    print("Server terminated.")
+    sc = SessionController()
+    sc.run_trial("rollback", 50, 3)
