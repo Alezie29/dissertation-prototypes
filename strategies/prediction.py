@@ -39,6 +39,8 @@ class ClientSidePrediction(SynchronisationStrategy):
             game_state.entities["player"]["vx"] = n["vx"] # Update velocities
             game_state.entities["player"]["vy"] = n["vy"]            
             game_state.step(1/30) # Move forward a step
+        # Prediciton always correct (unlike rollback), so this metric isn't directly comparable between the two
+        return True
 
     def predict(self, game_state, dt: float):
         game_state.entities["player"]["vx"] = self.current_input["vx"] # Update position

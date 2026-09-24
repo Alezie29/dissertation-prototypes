@@ -23,7 +23,7 @@ class RollbackNetcode(SynchronisationStrategy):
 
         # Compare to real input. If equal, return early (no correction needed)
         if guessed_input["vx"] == authoritative_state["vx"] and guessed_input["vy"] == authoritative_state["vy"]:
-            return
+            return False # Guess was right, no prediction needed
 
         # Restore game state from previous snap shot
         game_state.entities = copy.deepcopy(self.tick_to_state[corrected_tick]["state"])
@@ -38,6 +38,8 @@ class RollbackNetcode(SynchronisationStrategy):
             game_state.entities["player"]["vx"] = self.tick_to_state[tick]["guessed_input"]["vx"]
             game_state.entities["player"]["vy"] = self.tick_to_state[tick]["guessed_input"]["vy"]
             game_state.step(1/30) 
+
+        return True # Guess was wrong, state got rewound
 
     def predict(self, game_state, dt: float):
         guessed_input = self.last_known_input 

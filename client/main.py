@@ -3,6 +3,7 @@ from network.transport import UDPTransport
 from network.impairment import ImpairmentInjector
 from strategies.prediction import ClientSidePrediction
 from strategies.rollback import RollbackNetcode
+from metrics.logger import MetricsLogger
 import time
 import sys
 
@@ -34,11 +35,10 @@ def main():
     game_state = GameState()
     transport = UDPTransport(local_port=CLIENT_PORT)
     injector = ImpairmentInjector(latency_ms=latency_ms, packet_loss_pct=packet_loss_pct)
+    logger = MetricsLogger(role="client")
 
     current_input = {"vx": 5, "vy": 0}
-
     tagged_input_dict = strategy.process_input(game_state, current_input)
-    
 
     while True:
         # Resending the same tagged_input_dict every tick protects against packet loss regardless of which strategy is used
@@ -52,7 +52,10 @@ def main():
         # If the server sends back a correction, reconcile() rewinds/resimulates
         received_data = transport.receive()
         if received_data is not None:
-            strategy.reconcile(game_state, received_data)
+            corrected = strategy.reconcile(game_state, received_data)
+            if corrected:
+                logger.log_correction(received_data["seq"])
+                # Logs correction to compare how often each strategy gets it wrong
 
         time.sleep(1 / TICK_RATE)
 
