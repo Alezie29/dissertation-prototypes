@@ -17,7 +17,7 @@ STRATEGY_MAP = {
 }
 
 def main():
-    if len(sys.argv) < 4: # If user inputs an invalid format in the command line
+    if len(sys.argv) < 5: # If user inputs an invalid format in the command line
         print("Please use a valid format for the toolkit: python3 -m client.main <strategy_name> <latency_ms> <packet_loss_pct>")
         sys.exit(1)
 
@@ -28,6 +28,7 @@ def main():
 
     latency_ms = int(sys.argv[2]) # Turn latency and packet loss into ints and float (string would cause typeerror)
     packet_loss_pct = float(sys.argv[3]) # Can now use latency and Packet loss as command line arguments
+    trial_id = sys.argv[4]
 
     strategy_class = STRATEGY_MAP[strategy_name]
     strategy = strategy_class()
@@ -39,6 +40,7 @@ def main():
 
     current_input = {"vx": 5, "vy": 0}
     tagged_input_dict = strategy.process_input(game_state, current_input)
+    tick = 0
 
     while True:
         # Resending the same tagged_input_dict every tick protects against packet loss regardless of which strategy is used
@@ -46,6 +48,8 @@ def main():
 
         # predict() runs every tick — guesses, snapshots, steps, increments tick
         strategy.predict(game_state, 1 / TICK_RATE)
+
+        logger.log_state(tick, (game_state.entities["player"]["x"], game_state.entities["player"]["y"]))
 
         # print("Client player state:", game_state.entities["player"], "tick:", strategy.tick_counter) # Testing 
 
@@ -56,7 +60,9 @@ def main():
             if corrected:
                 logger.log_correction(received_data["seq"])
                 # Logs correction to compare how often each strategy gets it wrong
-
+        tick += 1
+        if tick % 5 == 0: # Logging every 5th tick, around 6 times per second at 30 ticks/sec
+            logger.flush(trial_id)
         time.sleep(1 / TICK_RATE)
 
 if __name__ == "__main__":

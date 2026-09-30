@@ -1,6 +1,6 @@
 import subprocess
 import time
-
+import uuid
 
 LATENCY_TIERS_MS = [0, 50, 100, 200]
 PACKET_LOSS_TIERS_PCT = [0, 3, 6]
@@ -30,11 +30,13 @@ class SessionController:
         return trials
 
     def run_trial(self, architecture: str, latency_ms: int, packet_loss_pct: float): # Using subprocess to open both the server and client.main files in conjunction, letting them run for some time, then terminating
+        trial_id = str(uuid.uuid4())[:8] # Generate a random unique ID, [:8] shortens it to the first 8 char
+       
         server_process = subprocess.Popen([
-            "python3", "-m", "server.main", str(latency_ms), str(packet_loss_pct)
+            "python3", "-m", "server.main", str(latency_ms), str(packet_loss_pct), trial_id
         ])
         client_process = subprocess.Popen([
-            "python3", "-m", "client.main", architecture, str(latency_ms), str(packet_loss_pct)
+            "python3", "-m", "client.main", architecture, str(latency_ms), str(packet_loss_pct), trial_id
         ])
         time.sleep(15)
         server_process.terminate()
