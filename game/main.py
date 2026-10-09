@@ -14,6 +14,7 @@ def main():
 
     hanuman = pygame.Rect(150, 230, 60, 120) # Creating the two rectangles to represent hanuman and tosakan
     tosakan = pygame.Rect(600, 230, 60, 120)
+    hanuman_x = 150.0
     running = True
     while running:
         dt = clock.tick(FPS) / 1000
@@ -24,6 +25,12 @@ def main():
 
         keys = pygame.key.get_pressed()
         # TODO: if A is held, move Hanuman left by SPEED * dt; if D, move right
+        if keys[pygame.K_a]:
+            hanuman_x -= SPEED * dt 
+        if keys[pygame.K_d]:
+            hanuman_x += SPEED * dt
+
+        hanuman.x = hanuman_x # The float holds the real position, this line copies it into Rect just before drawing.
 
         screen.fill((30, 30, 30))
         pygame.draw.rect(screen, WHITE, hanuman)
