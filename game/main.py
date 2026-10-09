@@ -30,6 +30,8 @@ def main():
         if keys[pygame.K_d]:
             hanuman_x += SPEED * dt
 
+        hanuman_x = max(0, min(hanuman_x, WIDTH - hanuman.width))
+
         hanuman.x = hanuman_x # The float holds the real position, this line copies it into Rect just before drawing.
 
         screen.fill((30, 30, 30))
