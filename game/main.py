@@ -1,5 +1,10 @@
 import pygame
 
+MAX_HEALTH = 100
+GREEN = (60, 180, 60)
+GREY = (60, 60, 60)
+BAR_W, BAR_H = 300, 20
+
 WIDTH, HEIGHT = 800, 450
 FPS = 60
 SPEED = 200  # pixels per second
@@ -20,7 +25,7 @@ PUNCH_W, PUNCH_H = 50, 30
 def new_fighter(x):
     return {
         "x": x, "y": GROUND_Y, "vx": 0.0, "vy": 0.0,
-        "health": 100,
+        "health": MAX_HEALTH,
         "facing": 1, # 1 = facing right, -1 = facing left
         "attack_t": -1.0, # -1 represents the fighter not attacking
         "hit_done": False, # Stops one punch damaging every frame of active window
@@ -76,11 +81,21 @@ def resolve_hit(attacker, defender):
         defender["health"] = max(0, defender["health"] - PUNCH_DAMAGE)
         attacker["hit_done"] = True
 
+def draw_health_bar(screen, fighter, x, align_right):
+    ratio = fighter["health"] / MAX_HEALTH
+    fill = int(BAR_W * ratio)
+    pygame.draw.rect(screen, GREY, (x, 20, BAR_W, BAR_H)) # Empty health bar
+    if align_right:
+        pygame.draw.rect(screen, GREEN, (x + BAR_W - fill, 20, fill, BAR_H)) # Drains towards the far right edge
+    else:
+        pygame.draw.rect(screen, GREEN, (x, 20, fill, BAR_H))
+
 def main():
     pygame.init()
     screen = pygame.display.set_mode((WIDTH, HEIGHT))
     pygame.display.set_caption("Hanuman vs Tosakan")
     clock = pygame.time.Clock()
+    font = pygame.font.Font(None, 72)
 
     hanuman_state = new_fighter(150.0)
     tosakan_state = new_fighter(600.0)
@@ -90,8 +105,7 @@ def main():
     tosakan = pygame.Rect(0, 0, FIGHTER_W, FIGHTER_H)
 
     no_input = {"left": False, "right": False, "jump": False, "punch": False}  # Tosakan idles for now
-    last_health = tosakan_state["health"]
-
+ 
     running = True
     while running:
         dt = clock.tick(FPS) / 1000
@@ -108,19 +122,23 @@ def main():
             "punch": keys[pygame.K_e],
         }
 
-        # Each fighter always faces the opponent
-        hanuman_state["facing"] = 1 if tosakan_state["x"] > hanuman_state["x"] else -1
-        tosakan_state["facing"] = -hanuman_state["facing"]
+        ko = hanuman_state["health"] <= 0 or tosakan_state["health"] <= 0
 
-        step_fighter(hanuman_state, hanuman_inputs, dt)
-        step_fighter(tosakan_state, no_input, dt)
+        if ko:
+            if keys[pygame.K_r]: # Resets the round
+                hanuman_state = new_fighter(150.0)
+                tosakan_state = new_fighter(600.0)
 
-        resolve_hit(hanuman_state, tosakan_state)
-        resolve_hit(tosakan_state, hanuman_state)
+        else:
+            # Each fighter always faces the other one
+            hanuman_state["facing"] = 1 if tosakan_state["x"] > hanuman_state["x"] else -1
+            tosakan_state["facing"] = -hanuman_state["facing"]
 
-        if tosakan_state["health"] != last_health: # Temporary, health bars come next TODO
-            print("Tosakan health:", tosakan_state["health"])
-            last_health = tosakan_state["health"]
+            step_fighter(hanuman_state, hanuman_inputs, dt)
+            step_fighter(tosakan_state, no_input, dt)
+
+            resolve_hit(hanuman_state, tosakan_state)
+            resolve_hit(tosakan_state, hanuman_state)
 
         hanuman.x = hanuman_state["x"]
         hanuman.y = hanuman_state["y"]
@@ -134,7 +152,16 @@ def main():
         hitbox = attack_rect(hanuman_state)
         if hitbox is not None:
             pygame.draw.rect(screen, RED, hitbox, 2) # Outline only, so active window is visible
-            
+
+        draw_health_bar(screen, hanuman_state, 20, False)
+        draw_health_bar(screen, tosakan_state, WIDTH - 20 - BAR_W, True)
+
+        if ko:
+            winner = "Hanuman wins" if tosakan_state["health"] <= 0 else "Tosakan wins"
+            text = font.render(winner, True, WHITE)
+            screen.blit(text, text.get_rect(center=(WIDTH // 2, HEIGHT // 2)))
+            hint = font.render("Press R", True, WHITE)
+            screen.blit(hint, hint.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 60)))
         pygame.display.flip()
 
     pygame.quit()
