@@ -1,32 +1,33 @@
 import pygame
 
-MAX_HEALTH = 100
-GREEN = (60, 180, 60)
-GREY = (60, 60, 60)
-BAR_W, BAR_H = 300, 20
-
 WIDTH, HEIGHT = 800, 450
 FPS = 60
 SPEED = 200  # pixels per second
 WHITE = (255, 255, 255) # Hanuman
 DARK_GREEN = (0, 100, 0) # Tosakan
 RED = (200, 60, 60) # Hitbox outline
+GREEN = (60, 180, 60) # Health bar
+GREY = (60, 60, 60)
 GRAVITY = 1800 # Pixels per second
 JUMP_SPEED = 700 # Pixels per second, Upwards
 GROUND_Y = 230.0 # Top edge of the rect when standing on the floor
 FIGHTER_W, FIGHTER_H = 60, 120
+MAX_HEALTH = 100
+BAR_W, BAR_H = 300, 20
 
-PUNCH_DURATION = 0.3 # Seconds from the start until the end of the punch
-PUNCH_ACTIVE_START = 0.1 # Hitbox exists between these two times
-PUNCH_ACTIVE_END = 0.2
-PUNCH_DAMAGE = 10
-PUNCH_W, PUNCH_H = 50, 30
+
+# One table describes every attack, cleaner code instead of a new variable each different attack added
+ATTACKS = {
+    "punch": {"duration": 0.3,  "start": 0.1, "end": 0.2, "damage": 10, "w": 50, "h": 30, "y_off": 30},
+    "kick":  {"duration": 0.45, "start": 0.2, "end": 0.3, "damage": 15, "w": 70, "h": 25, "y_off": 70},
+}
 
 def new_fighter(x):
     return {
         "x": x, "y": GROUND_Y, "vx": 0.0, "vy": 0.0,
         "health": MAX_HEALTH,
         "facing": 1, # 1 = facing right, -1 = facing left
+        "attack_kind": None,
         "attack_t": -1.0, # -1 represents the fighter not attacking
         "hit_done": False, # Stops one punch damaging every frame of active window
     }
@@ -50,26 +51,39 @@ def step_fighter(fighter, inputs, dt):
 
     fighter["x"] = max(0, min(fighter["x"], WIDTH - FIGHTER_W))
 
-    # Punch timer counts with dt, not real time. 
-    if inputs["punch"] and fighter["attack_t"] < 0:
-        fighter["attack_t"] = 0.0
-        fighter["hit_done"] = False
+    # Start an attack only if one isn't already running. If both keys are held, punch wins.
+    if fighter["attack_t"] < 0:
+        kind = None
+        if inputs["punch"]:
+            kind = "punch"
+        elif inputs["kick"]:
+            kind = "kick"  # Punch wins if both keys are held
+        if kind is not None:
+            fighter["attack_kind"] = kind
+            fighter["attack_t"] = 0.0
+            fighter["hit_done"] = False
+
+    # Attack timer counts with dt, not real time. 
     if fighter["attack_t"] >= 0:
         fighter["attack_t"] += dt
-        if fighter["attack_t"] >= PUNCH_DURATION:
+        if fighter["attack_t"] >= ATTACKS[fighter["attack_kind"]]["duration"]:
             fighter["attack_t"] = -1.0
+            fighter["attack_kind"] = None
 
 def attack_rect(fighter):
     # Returns the punch hitbox, or None if the fighter isn't in the active window
+    if fighter["attack_kind"] is None:
+        return None
+    atk = ATTACKS[fighter["attack_kind"]]
     t = fighter["attack_t"]
-    if t < PUNCH_ACTIVE_START or t > PUNCH_ACTIVE_END:
+    if t < atk["start"] or t > atk["end"]:
         return None
     if fighter["facing"] == 1:
-        x = fighter["x"] + FIGHTER_W # Starts at the right edge
+        x = fighter["x"] + FIGHTER_W  # Starts at the right edge
     else:
-        x = fighter["x"] - PUNCH_W # Starts at the left edge
-    y = fighter["y"] + 30 # Chest height
-    return pygame.Rect(int(x), int(y), PUNCH_W, PUNCH_H)
+        x = fighter["x"] - atk["w"]  # Starts at the left edge
+    y = fighter["y"] + atk["y_off"]
+    return pygame.Rect(int(x), int(y), atk["w"], atk["h"])
 
 def resolve_hit(attacker, defender):
     # Needs both fighters, so it can't live inside step_fighter
@@ -78,7 +92,8 @@ def resolve_hit(attacker, defender):
         return
     defender_rect = pygame.Rect(int(defender["x"]), int(defender["y"]), FIGHTER_W, FIGHTER_H)
     if hitbox.colliderect(defender_rect):
-        defender["health"] = max(0, defender["health"] - PUNCH_DAMAGE)
+        damage = ATTACKS[attacker["attack_kind"]]["damage"]
+        defender["health"] = max(0, defender["health"] - damage)
         attacker["hit_done"] = True
 
 def draw_health_bar(screen, fighter, x, align_right):
@@ -104,7 +119,7 @@ def main():
     hanuman = pygame.Rect(0, 0, FIGHTER_W, FIGHTER_H)
     tosakan = pygame.Rect(0, 0, FIGHTER_W, FIGHTER_H)
 
-    no_input = {"left": False, "right": False, "jump": False, "punch": False}  # Tosakan idles for now
+    no_input = {"left": False, "right": False, "jump": False, "punch": False, "kick": False}  # Tosakan idles for now
  
     running = True
     while running:
@@ -120,6 +135,7 @@ def main():
             "right": keys[pygame.K_d],
             "jump": keys[pygame.K_SPACE],
             "punch": keys[pygame.K_e],
+            "kick": keys[pygame.K_q],
         }
 
         ko = hanuman_state["health"] <= 0 or tosakan_state["health"] <= 0
