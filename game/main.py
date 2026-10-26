@@ -34,12 +34,18 @@ def new_fighter(x):
 
 def step_fighter(fighter, inputs, dt):
     # This will work on any fighter dict, never reads the keyboard
-    if inputs["left"]:
-        fighter["x"] -= SPEED * dt
-    if inputs["right"]:
-        fighter["x"] += SPEED * dt
+    on_floor = fighter["y"] >= GROUND_Y
+    attacking = fighter["attack_t"] >= 0
 
-    if inputs["jump"] and fighter["y"] >= GROUND_Y:  # Fighter on the floor
+    # A grounded fighter is rooted while attacking, every attack becomes a commitment, reduces spamming of attacks
+    if not (attacking and on_floor):
+        if inputs["left"]:
+            fighter["x"] -= SPEED * dt
+        if inputs["right"]:
+            fighter["x"] += SPEED * dt
+
+    # No jumping out of an attack (animation cancel)
+    if inputs["jump"] and on_floor and not attacking:  # Fighter on the floor
         fighter["vy"] = -JUMP_SPEED  # Y grows downwards, so up is negative
 
     fighter["vy"] += GRAVITY * dt
@@ -95,6 +101,18 @@ def resolve_hit(attacker, defender):
         damage = ATTACKS[attacker["attack_kind"]]["damage"]
         defender["health"] = max(0, defender["health"] - damage)
         attacker["hit_done"] = True
+
+def seperate(mover, blocker):
+    # Pushes the mover out of the blocker, so the blocker is never shoved
+    overlap_x = FIGHTER_W - abs(mover["x"] - blocker["x"])
+    overlap_y = FIGHTER_H - abs(mover["y"] - blocker["y"])
+    if overlap_x > 0 and overlap_y > 0:
+        if mover["x"] < blocker["x"]:
+            mover["x"] -= overlap_x  # Mover is on the left, so push left
+        else:
+            mover["x"] += overlap_x  # Mover is on the right, so push right
+        # Keep the mover inside the window
+        mover["x"] = max(0, min(mover["x"], WIDTH - FIGHTER_W))
 
 def draw_health_bar(screen, fighter, x, align_right):
     ratio = fighter["health"] / MAX_HEALTH
@@ -152,6 +170,8 @@ def main():
 
             step_fighter(hanuman_state, hanuman_inputs, dt)
             step_fighter(tosakan_state, no_input, dt)
+
+            seperate(hanuman_state, tosakan_state)
 
             resolve_hit(hanuman_state, tosakan_state)
             resolve_hit(tosakan_state, hanuman_state)
