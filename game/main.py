@@ -17,6 +17,10 @@ MAX_HEALTH = 100
 BAR_W, BAR_H = 300, 20
 BLOCK_DIVISOR = 5 # A blocked attack will only deal a fifth of the damage
 
+# Bot tuning
+BOT_RANGE = 45 # Gap in pixels at which the bot stops walking and starts attacking
+BOT_CYCLE = 1.5 # Seconds between the start of one attack and the next
+BOT_PRESS = 0.05 # How long the bot holds an attack button at the start of each cycle
 
 # One table describes every attack, cleaner code instead of a new variable each different attack added
 ATTACKS = {
@@ -32,6 +36,7 @@ def new_fighter(x):
         "attack_kind": None,
         "attack_t": -1.0, # -1 represents the fighter not attacking
         "hit_done": False, # Stops one punch damaging every frame of active window
+        "bot_t": 0.0, # Bot timer, only used by the bot, rollback can restore from here
     }
 
 def step_fighter(fighter, inputs, dt):
@@ -81,6 +86,28 @@ def step_fighter(fighter, inputs, dt):
         if fighter["attack_t"] >= ATTACKS[fighter["attack_kind"]]["duration"]:
             fighter["attack_t"] = -1.0
             fighter["attack_kind"] = None
+
+def bot_inputs(bot, target, dt):
+    # Scripted bot: Uses only the two fighter dicts and its own timer, never random or the real clock
+    bot["bot_t"] += dt
+    inputs = {"left": False, "right": False, "jump": False, "punch": False, "kick": False, "block": False}
+
+    gap = abs(bot["x"] - target["x"]) - FIGHTER_W # Empty space between the two fighters
+    if gap > BOT_RANGE:
+        # Too far away, walk towards hanuman
+        if target["x"] < bot["x"]:
+            inputs["left"] = True
+        else:
+            inputs["right"] = True
+    else:
+        # Within range of hanuman, alternate punches and kicks
+        phase = bot["bot_t"] % BOT_CYCLE
+        if phase < BOT_PRESS:
+            if int(bot["bot_t"] / BOT_CYCLE) % 2 == 0:
+                inputs["punch"] = True
+            else:
+                inputs["kick"] = True
+    return inputs 
 
 def attack_rect(fighter):
     # Returns the punch hitbox, or None if the fighter isn't in the active window
@@ -165,10 +192,6 @@ def main():
             "block": keys[pygame.K_f],
         }
 
-        # TEMPORARY TOSAKAN ATTACK TO TEST BLOCKING
-        tosakan_inputs = dict(no_input)
-        tosakan_inputs["punch"] = keys[pygame.K_t]
-
         ko = hanuman_state["health"] <= 0 or tosakan_state["health"] <= 0
 
         if ko:
@@ -180,6 +203,9 @@ def main():
             # Each fighter always faces the other one
             hanuman_state["facing"] = 1 if tosakan_state["x"] > hanuman_state["x"] else -1
             tosakan_state["facing"] = -hanuman_state["facing"]
+
+            # The bot decides from the current state, then both fighters step
+            tosakan_inputs = bot_inputs(tosakan_state, hanuman_state, dt)
 
             step_fighter(hanuman_state, hanuman_inputs, dt)
             step_fighter(tosakan_state, tosakan_inputs, dt)
@@ -219,6 +245,7 @@ def main():
             screen.blit(text, text.get_rect(center=(WIDTH // 2, HEIGHT // 2)))
             hint = font.render("Press R", True, WHITE)
             screen.blit(hint, hint.get_rect(center=(WIDTH // 2, HEIGHT // 2 + 60)))
+        
         pygame.display.flip()
 
     pygame.quit()
