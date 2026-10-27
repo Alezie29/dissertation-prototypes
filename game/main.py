@@ -6,6 +6,7 @@ SPEED = 200  # pixels per second
 WHITE = (255, 255, 255) # Hanuman
 DARK_GREEN = (0, 100, 0) # Tosakan
 RED = (200, 60, 60) # Hitbox outline
+BLUE = (80, 140, 255) # Block outline
 GREEN = (60, 180, 60) # Health bar
 GREY = (60, 60, 60)
 GRAVITY = 1800 # Pixels per second
@@ -14,6 +15,7 @@ GROUND_Y = 230.0 # Top edge of the rect when standing on the floor
 FIGHTER_W, FIGHTER_H = 60, 120
 MAX_HEALTH = 100
 BAR_W, BAR_H = 300, 20
+BLOCK_DIVISOR = 5 # A blocked attack will only deal a fifth of the damage
 
 
 # One table describes every attack, cleaner code instead of a new variable each different attack added
@@ -37,15 +39,19 @@ def step_fighter(fighter, inputs, dt):
     on_floor = fighter["y"] >= GROUND_Y
     attacking = fighter["attack_t"] >= 0
 
+    # Block only works on the ground and not mid-attack animation
+    blocking = inputs["block"] and on_floor and not attacking 
+    fighter["blocking"] = blocking
+
     # A grounded fighter is rooted while attacking, every attack becomes a commitment, reduces spamming of attacks
-    if not (attacking and on_floor):
+    if not (attacking and on_floor) and not blocking:
         if inputs["left"]:
             fighter["x"] -= SPEED * dt
         if inputs["right"]:
             fighter["x"] += SPEED * dt
 
-    # No jumping out of an attack (animation cancel)
-    if inputs["jump"] and on_floor and not attacking:  # Fighter on the floor
+    # No jumping out of an attack (animation cancel) or a block
+    if inputs["jump"] and on_floor and not attacking and not blocking:  # Fighter on the floor
         fighter["vy"] = -JUMP_SPEED  # Y grows downwards, so up is negative
 
     fighter["vy"] += GRAVITY * dt
@@ -57,8 +63,8 @@ def step_fighter(fighter, inputs, dt):
 
     fighter["x"] = max(0, min(fighter["x"], WIDTH - FIGHTER_W))
 
-    # Start an attack only if one isn't already running. If both keys are held, punch wins.
-    if fighter["attack_t"] < 0:
+    # Start an attack only if one isn't already running and if fighter is not blocking. If both keys are held, punch wins.
+    if fighter["attack_t"] < 0 and not blocking:
         kind = None
         if inputs["punch"]:
             kind = "punch"
@@ -99,6 +105,8 @@ def resolve_hit(attacker, defender):
     defender_rect = pygame.Rect(int(defender["x"]), int(defender["y"]), FIGHTER_W, FIGHTER_H)
     if hitbox.colliderect(defender_rect):
         damage = ATTACKS[attacker["attack_kind"]]["damage"]
+        if defender["blocking"]:
+            damage = damage // BLOCK_DIVISOR # Fighters always face each other, so a block always covers the front of the fighter
         defender["health"] = max(0, defender["health"] - damage)
         attacker["hit_done"] = True
 
@@ -137,7 +145,7 @@ def main():
     hanuman = pygame.Rect(0, 0, FIGHTER_W, FIGHTER_H)
     tosakan = pygame.Rect(0, 0, FIGHTER_W, FIGHTER_H)
 
-    no_input = {"left": False, "right": False, "jump": False, "punch": False, "kick": False}  # Tosakan idles for now
+    no_input = {"left": False, "right": False, "jump": False, "punch": False, "kick": False, "block": False}  # Tosakan idles for now
  
     running = True
     while running:
@@ -154,7 +162,12 @@ def main():
             "jump": keys[pygame.K_SPACE],
             "punch": keys[pygame.K_e],
             "kick": keys[pygame.K_q],
+            "block": keys[pygame.K_f],
         }
+
+        # TEMPORARY TOSAKAN ATTACK TO TEST BLOCKING
+        tosakan_inputs = dict(no_input)
+        tosakan_inputs["punch"] = keys[pygame.K_t]
 
         ko = hanuman_state["health"] <= 0 or tosakan_state["health"] <= 0
 
@@ -169,7 +182,7 @@ def main():
             tosakan_state["facing"] = -hanuman_state["facing"]
 
             step_fighter(hanuman_state, hanuman_inputs, dt)
-            step_fighter(tosakan_state, no_input, dt)
+            step_fighter(tosakan_state, tosakan_inputs, dt)
 
             seperate(hanuman_state, tosakan_state)
 
@@ -185,9 +198,17 @@ def main():
         pygame.draw.rect(screen, WHITE, hanuman)
         pygame.draw.rect(screen, DARK_GREEN, tosakan)
 
-        hitbox = attack_rect(hanuman_state)
-        if hitbox is not None:
-            pygame.draw.rect(screen, RED, hitbox, 2) # Outline only, so active window is visible
+        # Blue outline represents a fighter is blocking
+        if hanuman_state["blocking"]:
+            pygame.draw.rect(screen, BLUE, hanuman, 4)
+        if tosakan_state["blocking"]:
+            pygame.draw.rect(screen, BLUE, tosakan, 4)
+
+        # Show both fighters' active hitboxes
+        for state in (hanuman_state, tosakan_state):
+            hitbox = attack_rect(state)
+            if hitbox is not None:
+                pygame.draw.rect(screen, RED, hitbox, 2) # Outline only, so active window is still visible
 
         draw_health_bar(screen, hanuman_state, 20, False)
         draw_health_bar(screen, tosakan_state, WIDTH - 20 - BAR_W, True)
