@@ -7,6 +7,7 @@ WHITE = (255, 255, 255) # Hanuman
 DARK_GREEN = (0, 100, 0) # Tosakan
 RED = (200, 60, 60) # Hitbox outline
 BLUE = (80, 140, 255) # Block outline
+YELLOW = (240, 200, 60) # Bot wind-up warning outline to help Hanuman block
 GREEN = (60, 180, 60) # Health bar
 GREY = (60, 60, 60)
 GRAVITY = 1800 # Pixels per second
@@ -16,11 +17,26 @@ FIGHTER_W, FIGHTER_H = 60, 120
 MAX_HEALTH = 100
 BAR_W, BAR_H = 300, 20
 BLOCK_DIVISOR = 5 # A blocked attack will only deal a fifth of the damage
+BLOCK_HOLD = 0.3 # Seconds a block stays up after the key is released
 
 # Bot tuning
 BOT_RANGE = 45 # Gap in pixels at which the bot stops walking and starts attacking
-BOT_CYCLE = 1.5 # Seconds between the start of one attack and the next
-BOT_PRESS = 0.05 # How long the bot holds an attack button at the start of each cycle
+BOT_WARN = 0.35 # Seconds of yellow warning before each Tosakan attack
+BOT_PRESS = 0.1 # How long the bot holds an attack button at the start of each cycle
+
+# The bot repeats this script forever, one step after another (step name, seconds)
+BOT_SCRIPT = [
+    ("approach", 1.5),  # Walk toward Hanuman until in range
+    ("punch", 0.9),  # Warn, then punch
+    ("retreat", 0.8),  # Walk away to create space
+    ("approach", 1.2),
+    ("kick", 1.05),  # Warn, then kick
+    ("guard", 1.0),  # Hold block
+    ("retreat", 0.6),
+    ("approach", 1.2),
+]
+BOT_CYCLE = sum(length for _, length in BOT_SCRIPT)
+
 
 # One table describes every attack, cleaner code instead of a new variable each different attack added
 ATTACKS = {
@@ -33,10 +49,13 @@ def new_fighter(x):
         "x": x, "y": GROUND_Y, "vx": 0.0, "vy": 0.0,
         "health": MAX_HEALTH,
         "facing": 1, # 1 = facing right, -1 = facing left
-        "attack_kind": None,
+        "blocking": False, # Recalculated every fame
+        "block_t": 0.0, # Seconds of guard left, refreshes when block key is held
+        "attack_kind": None, # This will be punch, kick, or None
         "attack_t": -1.0, # -1 represents the fighter not attacking
         "hit_done": False, # Stops one punch damaging every frame of active window
         "bot_t": 0.0, # Bot timer, only used by the bot, rollback can restore from here
+        "warning": False, # True while the bot is winding up, drawn as a yellow outline
     }
 
 def step_fighter(fighter, inputs, dt):
@@ -44,8 +63,12 @@ def step_fighter(fighter, inputs, dt):
     on_floor = fighter["y"] >= GROUND_Y
     attacking = fighter["attack_t"] >= 0
 
-    # Block only works on the ground and not mid-attack animation
-    blocking = inputs["block"] and on_floor and not attacking 
+    # Holding block refreshes the guard timer, and the guard lingers briefly after release
+    if inputs["block"] and on_floor and not attacking:
+        fighter["block_t"] = BLOCK_HOLD
+    else:
+        fighter["block_t"] = max(0.0, fighter["block_t"] - dt)
+    blocking = fighter["block_t"] > 0 and on_floor and not attacking
     fighter["blocking"] = blocking
 
     # A grounded fighter is rooted while attacking, every attack becomes a commitment, reduces spamming of attacks
@@ -87,27 +110,39 @@ def step_fighter(fighter, inputs, dt):
             fighter["attack_t"] = -1.0
             fighter["attack_kind"] = None
 
+def current_segment(t):
+    # Finds which step of the bot script the timer is in, and how far into that step
+    t = t % BOT_CYCLE
+    for name, length in BOT_SCRIPT:
+        if t < length:
+            return name, t
+        t -= length
+    return "approach", 0.0  # Only reached by floating point rounding at the very end
+
 def bot_inputs(bot, target, dt):
     # Scripted bot: Uses only the two fighter dicts and its own timer, never random or the real clock
     bot["bot_t"] += dt
     inputs = {"left": False, "right": False, "jump": False, "punch": False, "kick": False, "block": False}
+    bot["warning"] = False
 
+    name, seg_t = current_segment(bot["bot_t"])
     gap = abs(bot["x"] - target["x"]) - FIGHTER_W # Empty space between the two fighters
-    if gap > BOT_RANGE:
-        # Too far away, walk towards hanuman
-        if target["x"] < bot["x"]:
-            inputs["left"] = True
-        else:
-            inputs["right"] = True
-    else:
-        # Within range of hanuman, alternate punches and kicks
-        phase = bot["bot_t"] % BOT_CYCLE
-        if phase < BOT_PRESS:
-            if int(bot["bot_t"] / BOT_CYCLE) % 2 == 0:
-                inputs["punch"] = True
-            else:
-                inputs["kick"] = True
-    return inputs 
+    toward = "left" if target["x"] < bot["x"] else "right"
+    away = "right" if toward == "left" else "left"
+
+    if name == "approach":
+        if gap > BOT_RANGE:
+            inputs[toward] = True
+    elif name == "retreat":
+        inputs[away] = True
+    elif name == "guard":
+        inputs["block"] = True
+    elif name in ("punch", "kick"):
+        if seg_t < BOT_WARN:
+            bot["warning"] = True  # Stand still and telegraph so the player has time to react
+        elif seg_t < BOT_WARN + BOT_PRESS and gap <= BOT_RANGE and bot["attack_t"] < 0:
+            inputs[name] = True  # The step name is also the attack name
+    return inputs
 
 def attack_rect(fighter):
     # Returns the punch hitbox, or None if the fighter isn't in the active window
@@ -171,8 +206,6 @@ def main():
     # Rects are only for drawing, the dicts hold the real positions
     hanuman = pygame.Rect(0, 0, FIGHTER_W, FIGHTER_H)
     tosakan = pygame.Rect(0, 0, FIGHTER_W, FIGHTER_H)
-
-    no_input = {"left": False, "right": False, "jump": False, "punch": False, "kick": False, "block": False}  # Tosakan idles for now
  
     running = True
     while running:
@@ -229,6 +262,10 @@ def main():
             pygame.draw.rect(screen, BLUE, hanuman, 4)
         if tosakan_state["blocking"]:
             pygame.draw.rect(screen, BLUE, tosakan, 4)
+
+        # Yellow outline warns that the bot is about to attack
+        if tosakan_state["warning"] and not ko:
+            pygame.draw.rect(screen, YELLOW, tosakan, 4)
 
         # Show both fighters' active hitboxes
         for state in (hanuman_state, tosakan_state):
