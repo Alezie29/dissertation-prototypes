@@ -22,7 +22,7 @@ class UDPTransport:
     def receive(self):
         try:
             byte_data, addr = self.sock.recvfrom(4096) # Try to get bytes from the socket if they are there, to decode
-        except BlockingIOError: # Catch the error and treat it as 'no package right now' instead of crashing
+        except (BlockingIOError, ConnectionResetError): # Catch the error and treat it as 'no package right now' instead of crashing
             return None
 
         # Decode bytes back to a string

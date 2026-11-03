@@ -13,6 +13,7 @@ BLOCK_HOLD = 0.3  # Seconds a block stays up after the key is released
 # The rules always advance in steps of exactly this size, so every run behaves the same
 TICK_RATE = 60
 TICK_DT = 1 / TICK_RATE
+NO_INPUT = {"left": False, "right": False, "jump": False, "punch": False, "kick": False, "block": False}
 
 # Bot tuning
 BOT_RANGE = 45  # Gap in pixels at which the bot stops walking and starts attacking
