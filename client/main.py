@@ -4,12 +4,12 @@ from network.impairment import ImpairmentInjector
 from strategies.prediction import ClientSidePrediction
 from strategies.rollback import RollbackNetcode
 from metrics.logger import MetricsLogger
+from engine.rules import TICK_RATE # Shared tick rate, allows both the game and toolkit to always agree
 import time
 import sys
 
 CLIENT_PORT = 9998
 SERVER_PORT = 9999
-TICK_RATE = 30
 
 STRATEGY_MAP = {
     "prediction" : ClientSidePrediction,
@@ -45,6 +45,7 @@ def main():
     while True:
         # Resending the same tagged_input_dict every tick protects against packet loss regardless of which strategy is used
         injector.apply(transport.send, tagged_input_dict, SERVER_PORT)
+        injector.release() # Send anyh packets whose delay has passed
 
         # predict() runs every tick — guesses, snapshots, steps, increments tick
         strategy.predict(game_state, 1 / TICK_RATE)

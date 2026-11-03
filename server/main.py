@@ -3,11 +3,11 @@ from engine.game_state import GameState
 from network.transport import UDPTransport
 from network.impairment import ImpairmentInjector
 from metrics.logger import MetricsLogger
+from engine.rules import TICK_RATE
 import time
 
 SERVER_PORT = 9999 # Hardcoded as examples, this will be updated later
 CLIENT_PORT = 9998
-TICK_RATE = 30 # Adjustable variable for better structure
 
 def main():
     if len(sys.argv) < 4:
@@ -39,7 +39,10 @@ def main():
                 logger.log_state(tick, (game_state.entities["player"]["x"], game_state.entities["player"]["y"]))
 
             # print("Server response:", response) # Testing
-
+        
+        # Runs every loop, so delayed packets go out on time
+        injector.release()
+        
         # Call game_state.step(dt), passing in how much time has elapsed, matching tick rate
         game_state.step(1 / TICK_RATE) # If tick rate is 30, this would be 0.033 (0.033 seconds per loop)
         tick += 1
