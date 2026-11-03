@@ -1,5 +1,6 @@
 from strategies.base import SynchronisationStrategy
 from engine.game_state import GameState
+from engine.rules import TICK_DT
 
 
 class ClientSidePrediction(SynchronisationStrategy):
@@ -38,7 +39,7 @@ class ClientSidePrediction(SynchronisationStrategy):
         for n in self.pending_inputs.values(): # Loop through remaining pending inputs
             game_state.entities["player"]["vx"] = n["vx"] # Update velocities
             game_state.entities["player"]["vy"] = n["vy"]            
-            game_state.step(1/30) # Move forward a step
+            game_state.step(TICK_DT) # Move forward a step
         # Prediciton always correct (unlike rollback), so this metric isn't directly comparable between the two
         return True
 

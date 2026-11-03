@@ -1,5 +1,6 @@
 from strategies.base import SynchronisationStrategy
 from engine.game_state import GameState
+from engine.rules import TICK_DT
 import copy
 
 class RollbackNetcode(SynchronisationStrategy):
@@ -31,13 +32,13 @@ class RollbackNetcode(SynchronisationStrategy):
         # Apply real input to player entity and step 
         game_state.entities["player"]["vx"] = authoritative_state["vx"]
         game_state.entities["player"]["vy"] = authoritative_state["vy"]
-        game_state.step(1/30)
+        game_state.step(TICK_DT)
 
         # Loop through every tick after corrected tick, for each one, reapply its stored guessed_input and step forward once, to catch back up to "now"
         for tick in range(corrected_tick +1, self.tick_counter):
             game_state.entities["player"]["vx"] = self.tick_to_state[tick]["guessed_input"]["vx"]
             game_state.entities["player"]["vy"] = self.tick_to_state[tick]["guessed_input"]["vy"]
-            game_state.step(1/30) 
+            game_state.step(TICK_DT) 
 
         return True # Guess was wrong, state got rewound
 
