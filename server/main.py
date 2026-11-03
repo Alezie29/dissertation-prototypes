@@ -38,34 +38,38 @@ def main():
             packet = transport.receive()
             if packet is None:
                 break
-            client_seen = True
+            if not client_seen:
+                client_seen = True
+                next_tick_time = time.monotonic()  # The world starts when the client first appears
             if packet["seq"] > latest_seq:
                 latest_seq = packet["seq"]
                 latest_input = {**NO_INPUT, **packet.get("inputs", {})}
 
-        # The world advances every tick, whether or not a new input arrived
-        step_world(world, latest_input, TICK_DT)
-        tick += 1
-
         if client_seen:
+            # The world only advances once a client is connected, so every trial starts from the same moment
+            step_world(world, latest_input, TICK_DT)
+            tick += 1
+
             # Send a copy, because the packet waits in the delay queue while the world keeps changing
             state = {"seq": latest_seq, "tick": tick, "world": copy.deepcopy(world)}
             injector.apply(transport.send, state, CLIENT_PORT)
-        injector.release()  # Runs every tick so delayed packets go out on time
 
-        if tick % 5 == 0:
-            logger.log_state(tick, (world["player"]["x"], world["player"]["y"]))
-        if tick % 60 == 0:
-            logger.flush(trial_id)
+            if tick % 5 == 0:
+                logger.log_state(tick, (world["player"]["x"], world["player"]["y"]))
+            if tick % 60 == 0:
+                logger.flush(trial_id)
 
-        # Sleep until the next tick is due, on a running schedule so small delays do not build up
-        next_tick_time += TICK_DT
-        delay = next_tick_time - time.monotonic()
-        if delay > 0:
-            time.sleep(delay)
+            next_tick_time += TICK_DT
+            if next_tick_time < time.monotonic() - TICK_DT:
+                next_tick_time = time.monotonic()  # Fell behind by more than a tick, so do not try to catch up
         else:
-            next_tick_time = time.monotonic()  # Fell behind, so do not try to catch up
+            next_tick_time = time.monotonic() + 0.001  # No client yet, so just keep listening
 
+        # Wait for the next tick, sending any delayed packets the moment they are due
+        while time.monotonic() < next_tick_time:
+            injector.release()
+            time.sleep(0.001)
+        injector.release()
 
 if __name__ == "__main__":
     main()
