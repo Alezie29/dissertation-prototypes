@@ -35,6 +35,7 @@ if __name__ == "__main__":
     def fake_send(data, dest_port):
         sent.append(data)
 
+    # TEST BLOCKS 
     # Total loss should send nothing
     drop = ImpairmentInjector(latency_ms=0, packet_loss_pct=100)
     drop.apply(fake_send, "a", 1)
