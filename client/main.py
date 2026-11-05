@@ -9,13 +9,15 @@ from metrics.logger import MetricsLogger
 from network.impairment import ImpairmentInjector
 from network.transport import UDPTransport
 from strategies.dead_reckoning import DeadReckoning
+from strategies.prediction import ClientSidePrediction
 
 CLIENT_PORT = 9998
 SERVER_PORT = 9999
 
-# Prediction and rollback will be added in the next stages, once this works first
+# Rollback will be added in the next stage, once these work first
 STRATEGY_MAP = {
     "dead_reckoning": DeadReckoning,
+    "prediction": ClientSidePrediction,
 }
 
 

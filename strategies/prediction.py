@@ -1,66 +1,72 @@
+from engine.rules import NO_INPUT, TICK_DT, new_world, step_world
 from strategies.base import SynchronisationStrategy
-from engine.game_state import GameState
-from engine.rules import TICK_DT
 
+TOLERANCE = 0.01  # Differences smaller than this are not counted as a correction
+
+def summary(world):
+    # The values a player could actually notice changing
+    p, n = world["player"], world["npc"]
+    return (p["x"], p["y"], p["health"], n["x"], n["health"])
+
+def differs(a, b):
+    return any(abs(x - y) > TOLERANCE for x, y in zip(a, b))
 
 class ClientSidePrediction(SynchronisationStrategy):
     def __init__(self):
-        self.sequence_number = 0
-        self.pending_inputs = {}
-        self.current_input = {"vx": 0, "vy": 0}
+        super().__init__()
+        self.world = new_world()  # Starts at once, since the server starts from the same world
+        self.pending = {}  # Inputs the server has not confirmed yet
+        self.current_seq = -1  # Number of this tick's input
+        self.current_input = dict(NO_INPUT)
+        self.acked = -1  # Newest input number the server has confirmed
 
-    def process_input(self, game_state, input_data):
-        seq = self.sequence_number
-        # Given some input data, tag it with the current sequence_number and store it in pending_inputs with sequence_number as key
-        self.pending_inputs[seq] = input_data
-        # Increment sequence_number for next time
-        self.sequence_number += 1
-        # Return the tagged input
-        tagged_input = {"seq": seq, **input_data}
-        self.current_input = input_data
-        return tagged_input
-    
-    def reconcile(self, game_state, authoritative_state):
-        confirmed_seq = authoritative_state["seq"]
-        
-        # Find every key in self.pending_inputs that is <= confirmed_seq
-        keys_delete = []
-        for k in self.pending_inputs: # Looping through a dict gives its keys
-            if k <= confirmed_seq:
-                keys_delete.append(k) # Add each key to a seperate list 
-        # Delete those keys from self.pending_inputs
-        for d in keys_delete:
-            self.pending_inputs.pop(d) # Go through the dict and remove each key without throwing error by removing it directly from the dict, hence a list was made first
+    def process_input(self, seq, inputs):
+        self.pending[seq] = inputs
+        self.current_seq = seq
+        self.current_input = inputs
 
-        # authoritative_state's x and y — only those two keys, nothing else
-        game_state.entities["player"]["x"] = authoritative_state["x"]
-        game_state.entities["player"]["y"] = authoritative_state["y"]
+    def predict(self, dt):
+        # Simulate this tick locally, so the player sees the result at once
+        step_world(self.world, self.current_input, dt)
 
-        for n in self.pending_inputs.values(): # Loop through remaining pending inputs
-            game_state.entities["player"]["vx"] = n["vx"] # Update velocities
-            game_state.entities["player"]["vy"] = n["vy"]            
-            game_state.step(TICK_DT) # Move forward a step
-        # Prediciton always correct (unlike rollback), so this metric isn't directly comparable between the two
-        return True
+    def reconcile(self, state):
+        # Ignore old or duplicate states
+        if state["seq"] <= self.acked:
+            return False
+        self.acked = state["seq"]
+        before = summary(self.world)
 
-    def predict(self, game_state, dt: float):
-        game_state.entities["player"]["vx"] = self.current_input["vx"] # Update position
-        game_state.entities["player"]["vy"] = self.current_input["vy"]
-        game_state.step(dt) # Move forward a step
+        # Drop the inputs the server has now applied
+        for seq in [s for s in self.pending if s <= state["seq"]]:
+            del self.pending[seq]
+
+        # Snap to the server's world, then replay the inputs it has not seen yet
+        # The current tick's input is left out, because predict() steps it next
+        world = state["world"]
+        for seq in sorted(self.pending):
+            if seq < self.current_seq:
+                step_world(world, self.pending[seq], TICK_DT)
+        self.world = world
+
+        return differs(before, summary(world))
+
 
 if __name__ == "__main__":
-    cp = ClientSidePrediction()
-    gs = GameState()
+    right = {**NO_INPUT, "right": True}
 
-    cp.process_input({"vx": 5, "vy": 0})
-    cp.process_input({"vx": 0, "vy": -3})
-    cp.process_input({"vx": 1, "vy": 1})
-    cp.process_input({"vx": 2, "vy": 2})
+    def run(server_input):
+        # The client holds right for 10 ticks, the server applied inputs 0 to 4 using server_input
+        cp = ClientSidePrediction()
+        server = new_world()
+        for _ in range(5):
+            step_world(server, server_input, TICK_DT)
+        corrected = None
+        for seq in range(10):
+            cp.process_input(seq, right)
+            if seq == 9:
+                corrected = cp.reconcile({"seq": 4, "tick": 5, "world": server})
+            cp.predict(TICK_DT)
+        return corrected, round(cp.world["player"]["x"], 2)
 
-    print("Player state before:", gs.entities["player"])
-    cp.reconcile(gs, {"seq": 1, "x": 10.0, "y": 5.0})
-    print("Player state after reconcile:", gs.entities["player"])
-    print("Remaining buffer:", cp.pending_inputs)
-
-    cp.predict(gs, {"vx": 3, "vy": -1}, 1/30)
-    print("Player state after predict:", gs.entities["player"])
+    print("Heard everything:", run(right))  
+    print("Server missed inputs:", run(NO_INPUT))  
