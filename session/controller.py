@@ -1,47 +1,100 @@
+import json
+import random
 import subprocess
+import sys
 import time
-import uuid
+from pathlib import Path
 
 LATENCY_TIERS_MS = [0, 50, 100, 200]
 PACKET_LOSS_TIERS_PCT = [0, 3, 6]
 FIXED_LATENCY_FOR_LOSS_BLOCK_MS = 100
+ARCHITECTURES = ["dead_reckoning", "prediction", "rollback"]
 
-ARCHITECTURES = [
-    "prediction",
-    "dead_reckoning",
-    "rollback",
-]
+ROUND_SECONDS = 40  # Length of each test round
+PRACTICE_SECONDS = 60  # The practice round is longer, so participants can learn the controls
+
+
+def ask(prompt):
+    # Throw away any keys pressed during the round, so they cannot answer the prompt, bug earlier was showing key strokes from previous rounds in terminal prompts
+    try:
+        import msvcrt  # Windows
+        while msvcrt.kbhit():
+            msvcrt.getch()
+    except ImportError:
+        try:
+            import termios  # Mac and Linux
+            termios.tcflush(sys.stdin, termios.TCIFLUSH)
+        except (ImportError, OSError, termios.error):
+            pass  # Not a real terminal, so there is nothing to flush
+    return input(prompt)
+
 
 class SessionController:
     def build_trial_matrix(self):
         trials = []
-        # TODO: Block 1 — loop over ARCHITECTURES, loop over LATENCY_TIERS_MS
+        # Block 1: Every architecture at every latency tier, with no packet loss
         for a in ARCHITECTURES:
-            for l in LATENCY_TIERS_MS:
-                trial = {"architecture": a, "latency_ms": l, "packet_loss_pct": 0}
-                trials.append(trial) # Go through each architecture then each latency tier, creating a new matrix for each one
-        # TODO: Block 2 — loop over ARCHITECTURES, loop over PACKET_LOSS_TIERS_PCT (skip 0)
+            for latency in LATENCY_TIERS_MS:
+                trials.append({"architecture": a, "latency_ms": latency, "packet_loss_pct": 0})
+        # Block 2: Every architecture at each loss tier, skipping 0 because Block 1 already covers it
         for a in ARCHITECTURES:
-            for l in PACKET_LOSS_TIERS_PCT:
-                if l == 0:
+            for loss in PACKET_LOSS_TIERS_PCT:
+                if loss == 0:
                     continue
-                trial = {"architecture": a, "latency_ms": FIXED_LATENCY_FOR_LOSS_BLOCK_MS, "packet_loss_pct": l} # Skipping 0 as it is already covered by Block 1's latency = 100, loss = 0
-                trials.append(trial)
+                trials.append({"architecture": a, "latency_ms": FIXED_LATENCY_FOR_LOSS_BLOCK_MS, "packet_loss_pct": loss})
         return trials
 
-    def run_trial(self, architecture: str, latency_ms: int, packet_loss_pct: float): # Using subprocess to open both the server and client.main files in conjunction, letting them run for some time, then terminating
-        trial_id = str(uuid.uuid4())[:8] # Generate a random unique ID, [:8] shortens it to the first 8 char
-       
-        server_process = subprocess.Popen([
-            "python3", "-m", "server.main", str(latency_ms), str(packet_loss_pct), trial_id
+    def run_trial(self, architecture, latency_ms, packet_loss_pct, trial_id, seconds):
+        # Start the server first, so it is listening before the client sends anything
+        server = subprocess.Popen([
+            sys.executable, "-m", "server.main", str(latency_ms), str(packet_loss_pct), trial_id
         ])
-        client_process = subprocess.Popen([
-            "python3", "-m", "client.main", architecture, str(latency_ms), str(packet_loss_pct), trial_id
+        time.sleep(0.5)
+        client = subprocess.Popen([
+            sys.executable, "-m", "client.main", architecture, str(latency_ms), str(packet_loss_pct), trial_id
         ])
-        time.sleep(15)
-        server_process.terminate()
-        client_process.terminate()
+        try:
+            time.sleep(seconds)
+        finally:
+            client.terminate()
+            server.terminate()
+            client.wait()
+            server.wait()
+        time.sleep(1.0)  # Give the ports time to free up before the next round
+
+    def run_session(self, participant, practice_seconds, round_seconds):
+        trials = self.build_trial_matrix()
+        # The order depends only on the participant ID, so it can be reproduced later
+        random.Random(participant).shuffle(trials)
+
+        # Save the key that links round numbers to conditions, and do not open it during the session
+        Path("logs").mkdir(exist_ok=True)
+        order = [{"round": i + 1, **t} for i, t in enumerate(trials)]
+        with open(f"logs/{participant}_order.json", "w") as f:
+            json.dump(order, f, indent=2)
+
+        ask("Practice round. Press Enter to start: ")
+        self.run_trial("prediction", 0, 0, f"{participant}_practice", practice_seconds)
+
+        for i, t in enumerate(trials, start=1):
+            answer = ask(f"Round {i} of {len(trials)}. Press Enter to start, or q then Enter to stop: ")
+            if answer.strip().lower() == "q":
+                print("Session stopped.")
+                return
+            # The condition is never printed, so the participant cannot read it off the screen
+            self.run_trial(t["architecture"], t["latency_ms"], t["packet_loss_pct"],
+                           f"{participant}_r{i:02d}", round_seconds)
+        print("Session finished.")
+
 
 if __name__ == "__main__":
-    sc = SessionController()
-    sc.run_trial("rollback", 50, 3)
+    if len(sys.argv) < 2:
+        print("Usage: python -m session.controller <participant_id> [quick]")
+        sys.exit(1)
+    quick = len(sys.argv) > 2 and sys.argv[2] == "quick"
+    # Quick mode uses 5 second rounds, FOR TESTING PURPOSES
+    SessionController().run_session(
+        sys.argv[1],
+        practice_seconds=5 if quick else PRACTICE_SECONDS,
+        round_seconds=5 if quick else ROUND_SECONDS,
+    )
