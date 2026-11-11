@@ -10,14 +10,16 @@ from network.impairment import ImpairmentInjector
 from network.transport import UDPTransport
 from strategies.dead_reckoning import DeadReckoning
 from strategies.prediction import ClientSidePrediction
+from strategies.rollback import RollbackNetcode
 
 CLIENT_PORT = 9998
 SERVER_PORT = 9999
+RESPONSE_TIMEOUT = 1.0  # Seconds to wait for movement to show before giving up on a measurement
 
-# Rollback will be added in the next stage, once these work first
 STRATEGY_MAP = {
     "dead_reckoning": DeadReckoning,
     "prediction": ClientSidePrediction,
+    "rollback": RollbackNetcode,
 }
 
 
@@ -48,6 +50,8 @@ def main():
     seq = 0  # Number of the next input to send
     tick = 0
     next_tick_time = time.monotonic()
+    move_start = None  # (time, x, direction) while waiting for a movement key to show on screen
+    was_moving = False
 
     running = True
     while running:
@@ -65,6 +69,14 @@ def main():
             "block": bool(keys[pygame.K_f]),
         }
 
+        # Start timing when a movement key goes down, to measure how long the screen takes to respond
+        moving = inputs["left"] != inputs["right"]
+        if moving and not was_moving and strategy.world is not None:
+            move_start = (time.monotonic(), strategy.world["player"]["x"], 1 if inputs["right"] else -1)
+        if not moving:
+            move_start = None
+        was_moving = moving
+
         # Send this tick's input to the server through the injector
         strategy.process_input(seq, inputs)
         injector.apply(transport.send, {"seq": seq, "inputs": inputs}, SERVER_PORT)
@@ -76,7 +88,7 @@ def main():
             if state is None:
                 break
             if strategy.reconcile(state):
-                logger.log_correction(tick)
+                logger.log_correction(tick, strategy.last_shift)
 
         strategy.predict(TICK_DT)
 
@@ -89,8 +101,19 @@ def main():
                 logger.log_state(tick, (player["x"], player["y"]))
         pygame.display.flip()
 
+        # Stop timing once the player has visibly moved in the pressed direction
+        if move_start is not None and strategy.world is not None:
+            moved = (strategy.world["player"]["x"] - move_start[1]) * move_start[2]
+            elapsed = time.monotonic() - move_start[0]
+            if moved > 1.0:
+                logger.log_response(tick, elapsed)
+                move_start = None
+            elif elapsed > RESPONSE_TIMEOUT:
+                move_start = None  # The player was rooted or blocked, so there is nothing to measure
+
         tick += 1
         if tick % 60 == 0:
+            logger.log_counters(tick, strategy.stats())
             logger.flush(trial_id)
 
         # Wait for the next tick, sending any delayed packets the moment they are due
@@ -102,6 +125,7 @@ def main():
             time.sleep(0.001)
         injector.release()
 
+    logger.log_counters(tick, strategy.stats())
     logger.flush(trial_id)
     pygame.quit()
 

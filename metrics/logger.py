@@ -1,6 +1,8 @@
-import time
 import json
+import time
+from math import hypot
 from pathlib import Path
+
 
 class MetricsLogger:
     def __init__(self, role: str, output_dir: str = "logs"):
@@ -9,34 +11,31 @@ class MetricsLogger:
         self.output_dir.mkdir(exist_ok=True)
         self.entries = []
 
-    def log_state(self, tick: int, position: tuple):
-        self.entries.append({
-            "role": self.role,
-            "tick": tick,
-            "timestamp": time.time(),
-            "position": position,
-        })
+    def _add(self, tick, **fields):
+        self.entries.append({"role": self.role, "tick": tick, "timestamp": time.time(), **fields})
 
-    def log_correction(self, tick: int):
-        self.entries.append({
-            "role": self.role,
-            "tick": tick,
-            "timestamp": time.time(),
-            "correction": True,
-        })
+    def log_state(self, tick, position):
+        self._add(tick, position=position)
+
+    def log_correction(self, tick, shift=0.0):
+        # Shift is how many pixels the player jumped on screen when the correction happened
+        self._add(tick, correction=True, shift=shift)
+
+    def log_response(self, tick, seconds):
+        # Seconds between a movement key going down and the player visibly moving
+        self._add(tick, response_s=seconds)
+
+    def log_counters(self, tick, counters):
+        # Running totals from the strategy, so the last entry in the file is the final figure
+        if counters:
+            self._add(tick, counters=counters)
 
     def flush(self, trial_id: str):
-        # Build unique filenames so client/server logs from different trials dont overwrite eachother
-        filename = f"{trial_id}_{self.role}.json"
-        filepath = self.output_dir / filename
-
-        # Write all entries as JSON
-        with open(filepath, "w") as f:
-            json.dump(self.entries, f, indent=2)
+        # Written often, because the controller ends a round by killing the process
+        with open(self.output_dir / f"{trial_id}_{self.role}.json", "w") as f:
+            json.dump(self.entries, f)
 
 
-    def export_error(pos_a: tuple, pos_b: tuple) -> float: # Euclidean distance formula
-        dx = pos_a[0] - pos_b[0]
-        dy = pos_a[1] - pos_b[1]
-        distance = (dx**2 + dy**2) ** 0.5
-        return distance
+def export_error(pos_a: tuple, pos_b: tuple) -> float:
+    # Aggarwal et al. (2004): Euclidean distance between two positions
+    return hypot(pos_a[0] - pos_b[0], pos_a[1] - pos_b[1])

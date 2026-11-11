@@ -1,77 +1,90 @@
-from strategies.base import SynchronisationStrategy
-from engine.game_state import GameState
-from engine.rules import TICK_DT
 import copy
+
+from engine.rules import NO_INPUT, TICK_DT, new_world, step_world
+from strategies.base import SynchronisationStrategy
+from strategies.prediction import differs, player_shift, summary
+
+HISTORY_TICKS = 120  # Two seconds of snapshots is more than any latency tier needs
+
 
 class RollbackNetcode(SynchronisationStrategy):
     def __init__(self):
-        self.tick_to_state = {}
-        self.tick_counter = 0
-        self.last_known_input = {"vx": 0, "vy": 0}
+        super().__init__()
+        self.world = new_world()  # Starts at once, since the server starts from the same world
+        self.history = {}  # If there is a tick number, make a snapshot of the world after that tick
+        self.inputs = {}  # If there is a tick number, the input is used on that tick
+        self.current_seq = -1  # Number of this tick's input
+        self.current_input = dict(NO_INPUT)
+        self.acked = -1  # Newest input number the server has confirmed
+        self.rewinds = 0  # How many times a prediction turned out wrong
+        self.replayed_ticks = 0  # Total ticks re-simulated, which is the cost of rolling back
 
-    def process_input(self,game_state,input_data):
-        # Storing input so future predict method can guess it's still happening
-        self.last_known_input = input_data
-        # Return a tagged version so the client loop can send it the same way regardless of which strategy is used
-        tagged_input = {"seq":self.tick_counter, **input_data}
-        return tagged_input
+    def process_input(self, seq, inputs):
+        self.inputs[seq] = inputs
+        self.current_seq = seq
+        self.current_input = inputs
 
-    def reconcile(self, game_state, authoritative_state):
-        corrected_tick = authoritative_state["seq"]
+    def predict(self, dt):
+        # Simulate this tick locally, then keep a snapshot so it can be rewound to later
+        step_world(self.world, self.current_input, dt)
+        self.history[self.current_seq] = copy.deepcopy(self.world)
+        # Drop snapshots too old to ever be rewound to
+        old = self.current_seq - HISTORY_TICKS
+        self.history.pop(old, None)
+        self.inputs.pop(old, None)
 
-        # Get the guess that was stored for this tick
-        guessed_input = self.tick_to_state[corrected_tick]["guessed_input"] 
+    def reconcile(self, state):
+        self.last_shift = 0.0
+        # Ignore old or duplicate states
+        if state["seq"] <= self.acked:
+            return False
+        self.acked = state["seq"]
+        seq = state["seq"]
+        server_world = state["world"]
 
-        # Compare to real input. If equal, return early (no correction needed)
-        if guessed_input["vx"] == authoritative_state["vx"] and guessed_input["vy"] == authoritative_state["vy"]:
-            return False # Guess was right, no prediction needed
+        # Compare the server's world with what this client predicted for the same tick
+        predicted = self.history.get(seq)
+        if predicted is not None and not differs(summary(predicted), summary(server_world)):
+            return False  # The prediction was right, so nothing is rewound
 
-        # Restore game state from previous snap shot
-        game_state.entities = copy.deepcopy(self.tick_to_state[corrected_tick]["state"])
+        # The prediction was wrong, so go back to the server's world and replay the newer inputs
+        before = summary(self.world)
+        world = server_world
+        self.history[seq] = copy.deepcopy(world)
+        for s in range(seq + 1, self.current_seq):  # The current tick is left out, because predict() steps it next
+            step_world(world, self.inputs.get(s, NO_INPUT), TICK_DT)
+            self.history[s] = copy.deepcopy(world)
+            self.replayed_ticks += 1
+        self.world = world
+        self.rewinds += 1
 
-        # Apply real input to player entity and step 
-        game_state.entities["player"]["vx"] = authoritative_state["vx"]
-        game_state.entities["player"]["vy"] = authoritative_state["vy"]
-        game_state.step(TICK_DT)
+        # Only count it as a correction if what the player sees actually changed
+        after = summary(world)
+        if differs(before, after):
+            self.last_shift = player_shift(before, after)
+            return True
+        return False
 
-        # Loop through every tick after corrected tick, for each one, reapply its stored guessed_input and step forward once, to catch back up to "now"
-        for tick in range(corrected_tick +1, self.tick_counter):
-            game_state.entities["player"]["vx"] = self.tick_to_state[tick]["guessed_input"]["vx"]
-            game_state.entities["player"]["vy"] = self.tick_to_state[tick]["guessed_input"]["vy"]
-            game_state.step(TICK_DT) 
+    def stats(self):
+        return {"replays": self.rewinds, "replayed_ticks": self.replayed_ticks}
 
-        return True # Guess was wrong, state got rewound
-
-    def predict(self, game_state, dt: float):
-        guessed_input = self.last_known_input 
-        self.tick_to_state[self.tick_counter] = { # Must snapshot before stepping so rollback has a valid state to come back to
-            "state": game_state.clone(),
-            "guessed_input": guessed_input,
-        }
-        # Apply the guessed input to the player entity
-        game_state.entities["player"]["vx"] = guessed_input["vx"]
-        game_state.entities["player"]["vy"] = guessed_input["vy"]
-
-        # Step the simulation forward
-        game_state.step(dt)
-
-        # Increment tick_counter
-        self.tick_counter += 1  
 
 if __name__ == "__main__":
-    rb = RollbackNetcode()
-    gs = GameState()
+    right = {**NO_INPUT, "right": True}
 
-    # Simulate a few predicted ticks with a "wrong" guess
-    rb.process_input(gs, {"vx": 5, "vy": 0})  # sets last_known_input
-    rb.predict(gs, 1/30)  # tick 0
-    rb.predict(gs, 1/30)  # tick 1
-    rb.predict(gs, 1/30)  # tick 2
+    def run(server_input):
+        # The client holds right for 10 ticks, the server applied inputs 0 to 4 using server_input
+        rb = RollbackNetcode()
+        server = new_world()
+        for _ in range(5):
+            step_world(server, server_input, TICK_DT)
+        corrected = None
+        for seq in range(10):
+            rb.process_input(seq, right)
+            if seq == 9:
+                corrected = rb.reconcile({"seq": 4, "tick": 5, "world": server})
+            rb.predict(TICK_DT)
+        return corrected, round(rb.world["player"]["x"], 2), rb.rewinds
 
-    print("Before reconcile:", gs.entities["player"])
-    print("Stored ticks:", list(rb.tick_to_state.keys()))
-
-    # Server says tick 0's REAL input was actually different
-    rb.reconcile(gs, {"tick": 0, "vx": 2, "vy": 0})
-
-    print("After reconcile:", gs.entities["player"]) 
+    print("Heard everything:", run(right))  # TESTING expect (False, 183.33, 0)
+    print("Server missed inputs:", run(NO_INPUT))  # TESTING expect (True, 166.67, 1)
