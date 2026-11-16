@@ -14,11 +14,11 @@ SECONDS = 8
 
 
 def scripted_input(t):
-    # Fixed taps, the same every run: right for 1 s, pause, left for 1 s, pause, repeating
-    phase = t % 4.0
-    if phase < 1.0:
+    # Keys flip every 0.1 s, so a lost packet is likely to be one that carries a change
+    step = int(t * 10) % 4
+    if step == 0:
         return {**NO_INPUT, "right": True}
-    if 2.0 <= phase < 3.0:
+    if step == 2:
         return {**NO_INPUT, "left": True}
     return dict(NO_INPUT)
 
