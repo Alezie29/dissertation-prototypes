@@ -22,3 +22,5 @@ metrics_output/
 # Environment
 .env
 results/
+
+assets/
